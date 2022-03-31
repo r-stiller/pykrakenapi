@@ -108,7 +108,7 @@ def callratelimiter(query_type):
                             self.time_of_last_public_query = now
                             continue
 
-            # privat API, determine increment
+            # private API, determine increment
             if query_type == 'ledger/trade history':
                 incr = 2
             elif query_type == 'other':
@@ -1569,6 +1569,234 @@ class KrakenAPI(object):
         return depositstatus
 
     @crl_sleep
+    @callratelimiter('other')
+    def get_withdrawal_information(self, key, asset='XBT', amount=0.0, otp=None):
+        """Retrieve fee information about potential withdrawals for a particular asset, key and amount.
+
+        Return a ``pd.DataFrame`` of withdrawal info.
+
+        Parameters
+        ----------
+        key : str
+            Withdrawal key name, as set up on your account.
+
+        asset : str (default='XBT')
+            Asset being withdrawn.
+
+        amount : float (default=0.0)
+            Amount to be withdrawn.
+
+        otp : str
+            Two-factor password (if two-factor enabled, otherwise not required).
+
+        Returns
+        -------
+        withdrawal_info : pd.DataFrame
+            Table containing withdrawal info.
+            method = name of asset
+            limit = max. available for withdraw
+            amount = withdrawn amount (fees already subtracted)
+            fee = withdrawal fees
+
+        Raises
+        ------
+        HTTPError
+            An HTTP error occurred.
+
+        KrakenAPIError
+            A kraken.com API error occurred.
+
+        CallRateLimitError
+            The call rate limiter blocked the query.
+
+        """
+
+        # create data dictionary
+        data = {arg: value for arg, value in locals().items()
+                if arg != 'self' and value is not None}
+
+        # query
+        res = self.api.query_private('WithdrawInfo', data=data)
+
+        # check for error
+        if len(res['error']) > 0:
+            raise KrakenAPIError(res['error'])
+
+        # create dataframe
+        withdrawal_info = pd.DataFrame(index=[asset], data=res['result']).T
+
+        return withdrawal_info
+
+    @crl_sleep
+    @callratelimiter('other')
+    def withdraw_funds(self, key, asset='XBT', amount=0.0, otp=None):
+        """Make a withdrawal request.
+
+        Initialize a withdrawal and return the withdrawal refid.
+
+        Parameters
+        ----------
+        key : str
+            Withdrawal key name, as set up on your account.
+
+        asset : str (default='XBT')
+            Asset being withdrawn.
+
+        amount : float (default=0.0)
+            Amount to be withdrawn.
+
+        otp : str
+            Two-factor password (if two-factor enabled, otherwise not required).
+
+        Returns
+        -------
+        withdrawal_refid : str
+            refid of the withdraw request.
+
+        Raises
+        ------
+        HTTPError
+            An HTTP error occurred.
+
+        KrakenAPIError
+            A kraken.com API error occurred.
+
+        CallRateLimitError
+            The call rate limiter blocked the query.
+
+        """
+
+        # create data dictionary
+        data = {arg: value for arg, value in locals().items()
+                if arg != 'self' and value is not None}
+
+        # query
+        res = self.api.query_private('Withdraw', data=data)
+
+        # check for error
+        if len(res["error"]) > 0:
+            raise KrakenAPIError(res['error'])
+
+        return res['result']
+
+    @crl_sleep
+    @callratelimiter('other')
+    def get_withdrawal_status(self, asset='XBT', method=None, otp=None):
+        """Retrieve information about recently requests withdrawals.
+
+        Return a ``pd.DataFrame`` of recent withdrawals.
+
+        Parameters
+        ----------
+        asset : str (default='XBT')
+            Asset being withdrawn.
+
+        method : str (default=None)
+            Name of the withdrawal method.
+
+        otp : str
+            Two-factor password (if two-factor enabled, otherwise not required).
+
+        Returns
+        -------
+        withdrawalstatus : pd.DataFrame
+            Table containing recent withdrawal status info.
+            method = name of withdrawal method
+            aclass = asset class
+            asset = asset
+            refid = reference ID
+            txid = method transaction ID
+            info = method transaction information
+            amount = amount withdrawn
+            fee = fees paid
+            time = unix timestamp when request was made
+            status = status of withdrawal
+            status-prop = addition status properties (if available)
+                          "cancel-pending" cancelation requested
+                          "canceled" canceled
+                          "cancel-denied" cancelation requested but was denied
+                          "return" a return transaction initiated by Kraken; it cannot be canceled
+                          "onhold" withdrawal is on hold pending review
+
+        Raises
+        ------
+        HTTPError
+            An HTTP error occurred.
+
+        KrakenAPIError
+            A kraken.com API error occurred.
+
+        CallRateLimitError
+            The call rate limiter blocked the query.
+
+        """
+
+        # create data dictionary
+        data = {arg: value for arg, value in locals().items()
+                if arg != 'self' and value is not None}
+
+        # query
+        res = self.api.query_private('WithdrawStatus', data=data)
+
+        # check for error
+        if len(res["error"]) > 0:
+            raise KrakenAPIError(res['error'])
+
+        # create dataframe
+        withdrawalstatus = pd.DataFrame(index=[asset], data=res['result']).T
+
+        return withdrawalstatus
+
+    @crl_sleep
+    @callratelimiter('other')
+    def cancel_withdrawal(self, asset='XBT', refid=None, otp=None):
+        """Cancel a recently requested withdrawal, if it has not already been successfully processed.
+
+        Returns whether cancellation was successful or not.
+
+        Parameters
+        ----------
+        asset : str (default='XBT')
+            Asset being withdrawn.
+
+        refid : str (default=None)
+            Withdrawal reference ID.
+
+        otp : str
+            Two-factor password (if two-factor enabled, otherwise not required).
+
+        Returns
+        -------
+        succes : bool
+            Whether cancellation was successful or not.
+
+        Raises
+        ------
+        HTTPError
+            An HTTP error occurred.
+
+        KrakenAPIError
+            A kraken.com API error occurred.
+
+        CallRateLimitError
+            The call rate limiter blocked the query.
+
+        """
+
+        # create data dictionary
+        data = {arg: value for arg, value in locals().items()
+                if arg != 'self' and value is not None}
+
+        # query
+        res = self.api.query_private('WithdrawCancel', data=data)
+
+        # check for error
+        if len(res['error']) > 0:
+            raise KrakenAPIError(res['error'])
+
+        return res['result']
+
+    @crl_sleep
     @callratelimiter('ledger/trade history')
     def query_trades_info(self, txid, trades=False, otp=None, ascending=False):
         """Query trades info.
@@ -1643,9 +1871,7 @@ class KrakenAPI(object):
     @crl_sleep
     @callratelimiter('other')
     def get_open_positions(self, txid=None, docalcs=False, otp=None):
-        """UNTESTED!
-
-        Get open positins info.
+        """Get open positins info.
 
         Return a ``pd.DataFrame`` of open positions info.
 
@@ -1997,89 +2223,123 @@ class KrakenAPI(object):
 
         return currency, volume, fees, fees_maker
 
-    def add_standard_order(self, pair, type, ordertype, volume, price=None,
-                           price2=None, leverage=None, oflags=None, starttm=0,
-                           expiretm=0, userref=None, validate=True,
+    def add_standard_order(self, ordertype, type, pair, userref=None,
+                           volume=None, price=None, price2=None,
+                           trigger="last", leverage=None, oflags=None,
+                           timeinforce="GTC", starttm=0, expiretm=0,
                            close_ordertype=None, close_price=None,
-                           close_price2=None, otp=None,
-                           trading_agreement='agree'):
-        """Add a standard order.
-
-        Add a standard order and return an order description info and an array
-        of transaction ids for the order (if succesfull).
+                           close_price2=None, deadline=None, validate=True,
+                           otp=None):
+        """Place a new order.
 
         Parameters
         ----------
-        pair : str
-            Asset pair.
-
-        type : str
-            Type of order (buy/sell).
-
         ordertype : str
             Order type, one of:
-            market
-            limit (price = limit price)
-            stop-loss (price = stop loss price)
-            take-profit (price = take profit price)
-            stop-loss-profit (price = stop loss price, price2 = take profit
-                price)
-            stop-loss-profit-limit (price = stop loss price, price2 = take
-                profit price)
-            stop-loss-limit (price = stop loss trigger price, price2 =
-                triggered limit price)
-            take-profit-limit (price = take profit trigger price, price2 =
-                triggered limit price)
-            trailing-stop (price = trailing stop offset)
-            trailing-stop-limit (price = trailing stop offset, price2 =
-                triggered limit offset)
-            stop-loss-and-limit (price = stop loss price, price2 = limit price)
-            settle-position
+            ["market", "limit", "stop-loss", "take-profit", "stop-loss-limit",
+             "take-profit-limit", "settle-position"]
 
-        volume : str
-            Order volume in lots. For minimum order sizes, see
-            https://support.kraken.com/hc/en-us/articles/205893708
+        type : str
+            Order direction (buy/sell), one of:
+            ["buy", "sell"]
+
+        pair : str
+            Asset pair id or altname.
+
+        userref : int, optional (default=None)
+            User reference id.
+            userref is an optional user-specified integer id that can be
+            associated with any number of orders. Many clients choose a userref
+            corresponding to a unique integer id generated by their systems
+            (e.g. a timestamp). However, because we don't enforce uniqueness on
+            our side, it can also be used to easily group orders by pair, side,
+            strategy, etc. This allows clients to more readily cancel or query
+            information about orders in a particular group, with fewer API
+            calls by using userref instead of our txid, where supported.
+
+        volume : str, optional (default=None)
+            Order quantity in terms of the base asset
+            Note: Volume can be specified as 0 for closing margin orders to
+                  automatically fill the requisite quantity.
 
         price : str, optional (default=None)
-            Price (optional). Dependent upon ordertype
+            Price.
+            - Limit price for limit orders
+            - Trigger price for stop-loss, stop-loss-limit, take-profit and
+              take-profit-limit orders
 
         price2 : str, optional (default=None)
-            Secondary price (optional). Dependent upon ordertype
+            Secondary Price. Limit price for stop-loss-limit and
+            take-profit-limit orders.
+            Note: Either price or price2 can be preceded by +, -, or # to
+            specify the order price as an offset relative to the last traded
+            price. + adds the amount to, and - subtracts the amount from the
+            last traded price. # will either add or subtract the amount to the
+            last traded price, depending on the direction and order type used.
+            Relative prices can be suffixed with a % to signify the relative
+            amount as a percentage.
+
+        trigger : str, optional (default="last")
+            Price signal used to trigger stop-loss, stop-loss-limit,
+            take-profit and take-profit-limit orders. One of ["index", "last"].
+            Note: This trigger type will as well be used for associated
+            conditional close orders.
 
         leverage : str, optional (default=None)
-            Amount of leverage desired (optional). Default = none
+            Amount of leverage desired.
 
         oflags : str, optional (default=None)
             Comma delimited list of order flags:
-            viqc = volume in quote currency (not available for leveraged
-                orders)
-            fcib = prefer fee in base currency
-            fciq = prefer fee in quote currency
-            nompp = no market price protection
-            post = post only order (available when ordertype = limit)
+            - post post-only order (available when ordertype = limit)
+            - fcib prefer fee in base currency (default if selling)
+            - fciq prefer fee in quote currency (default if buying, mutually
+              exclusive with fcib)
+            - nompp disable market price protection for market orders
 
-        starttm : int, optional (default=None)
-            Scheduled start time:
+        timeinforce : str, optional (default="GTC")
+            One of ["GTC", "IOC", "GTD"].
+            Time-in-force of the order to specify how long it should remain in
+            the order book before being cancelled. GTC (Good-'til-cancelled) is
+            default if the parameter is omitted. IOC (immediate-or-cancel) will
+            immediately execute the amount possible and cancel any remaining
+            balance rather than resting in the book. GTD (good-'til-date), if
+            specified, must coincide with a desired expiretm.
+
+        starttm : int, optional (default=0)
+            Scheduled start time. Can be specified as an absolute timestamp or
+            as a number of seconds in the future.
             0 = now (default)
-            +<n> = schedule start time <n> seconds from now
+            +<n> = schedule start time seconds from now
             <n> = unix timestamp of start time
 
-        expiretm : int, optional (default=None)
-            Expiration time:
+        expiretm : int, optional (default=0)
+            Expiration time.
             0 = no expiration (default)
-            +<n> = expire <n> seconds from now
+            +<n> = expire seconds from now, minimum 5 seconds
             <n> = unix timestamp of expiration time
 
-        userref : int, optional (default=None)
-            User reference id.  32-bit signed number.
+        close_ordertype : str, optional (default=None)
+            Conditional close order type, one of ["limit", "stop-loss",
+            "take-profit", "stop-loss-limit", "take-profit-limit"].
+            Note: Conditional close orders are triggered by execution of the
+            primary order in the same quantity and opposite direction, but once
+            triggered are independent orders that may reduce or increase net
+            position.
+
+        close_price : str, optional (default=None)
+            Conditional close order price
+
+        close_price2 : str, optional (default=None)
+            Conditional close order price2
+
+        deadline : str, optional (default=None)
+            RFC3339 timestamp (e.g. 2021-04-01T00:18:45Z) after which the
+            matching engine should reject the new order request, in presence of
+            latency or order queueing. min now() + 2 seconds, max now() + 60
+            seconds.
 
         validate : bool, optional (default=True)
             Validate inputs only. Do not submit order (default).
-
-        optional closing order to add to system when order gets filled:
-            close[ordertype] = order type
-            close[price] = price
-            close[price2] = secondary price
 
         otp : str
             Two-factor password (if two-factor enabled, otherwise not required)
@@ -2089,8 +2349,7 @@ class KrakenAPI(object):
         res : dict
             res['descr'] = order description info
                 order = order description
-                close = conditional close order description (if conditional
-                    close set)
+                close = Conditional close order description, if applicable
             res['txid'] = array of transaction ids for order (if order was
                 added successfully)
 
@@ -2121,22 +2380,10 @@ class KrakenAPI(object):
 
         Notes
         -----
-        See get_tradable_asset_pairs for specifications on asset pair prices,
-        lots, and leverage.
 
-        Prices can be preceded by +, -, or # to signify the price as a relative
-        amount (with the exception of trailing stops, which are always
-        relative). + adds the amount to the current offered price. - subtracts
-        the amount from the current offered price. # will either add or
-        subtract the amount to the current offered price, depending on the type
-        and order type used. Relative prices can be suffixed with a % to
-        signify the relative amount as a percentage of the offered price.
-
-        For orders using leverage, 0 can be used for the volume to auto-fill
-        the volume needed to close out your position.
-
-        If you receive the error "EOrder:Trading agreement required", refer to
-        your API key management page for further details.
+        See get_tradable_asset_pairs for details on the available trading
+        pairs, their price and quantity precisions, order minimums, available
+        leverage, etc.
 
         """
 
@@ -2166,9 +2413,7 @@ class KrakenAPI(object):
         return res['result']
 
     def cancel_open_order(self, txid, otp=None):
-        """UNTESTED!
-
-        Cancel open order(s).
+        """Cancel open order(s).
 
         Cancel open order with transaction id ``txid``.
 
@@ -2263,3 +2508,338 @@ class KrakenAPI(object):
         if self.api_counter < 0:
             self.api_counter = 0
         self.time_of_last_query = now
+
+    @crl_sleep
+    @callratelimiter('other')
+    def get_stakeable_assets(self, otp=None):
+        """Get list of stakeable assets and staking details.
+
+        Return a ``pd.DataFrame`` of asset that the user is able to stake.
+        This operation requires an API key with both `Withdraw funds` and
+        `Query funds` permission.
+
+        Parameters
+        ----------
+        otp : str
+            Two-factor password (if two-factor enabled, otherwise not required)
+
+        Returns
+        -------
+        assets : pd.DataFrame
+            Table containing asset names staking details.
+            index = asset name
+            method = Unique ID of the staking option (used in Stake/Unstake
+            operations)
+            staking_asset = Staking asset code/name
+            on_chain = Whether the staking operation is on-chain or not.
+            can_stake = Whether the user will be able to stake this asset.
+            can_unstake = Whether the user will be able to unstake this asset.
+            rewards.reward = Reward earned while staking.
+            rewards.type = Reward type.
+            minimum_amount.staking = minimum amount that can be staked.
+            minimum_amount.unstaking = minimum amount that can be unstaked
+
+        Raises
+        ------
+        HTTPError
+            An HTTP error occurred.
+
+        KrakenAPIError
+            A kraken.com API error occurred.
+
+        CallRateLimitError
+            The call rate limiter blocked the query.
+
+        """
+
+        # create data dictionary
+        data = {arg: value for arg, value in locals().items() if
+                arg != 'self' and value is not None}
+
+        # query
+        res = self.api.query_private('Staking/Assets', data=data)
+
+        # check for error
+        if len(res['error']) > 0:
+            raise KrakenAPIError(res['error'])
+
+        # create dataframe
+        assets = pd.json_normalize(data=res['result']).set_index('asset')
+
+        return assets
+
+    @crl_sleep
+    @callratelimiter('other')
+    def get_pending_staking_transactions(self, otp=None):
+        """Get list of pending staking transactions.
+
+        Returns a ``pd.DataFrame`` of pending staking transactions.
+
+        Parameters
+        ----------
+        otp : str
+            Two-factor password (if two-factor enabled, otherwise not required)
+
+        Returns
+        -------
+        transactions : pd.DataFrame
+            Table containing transaction refids and details.
+            index = refid
+            type = Type of transaction {'bonding', 'reward', 'unbonding'}
+            asset = Asset code/name
+            amount = The transaction amount
+            time = Unix timestamp when the transaction was initiated.
+            bond_start = Unix timestamp from the start of bond period
+            (applicable only to `bonding` transactions).
+            bond_end = Unix timestamp of the end of bond period
+            (applicable only to `bonding` transactions).
+            status = Transaction status {'Initial', 'Pending', 'Settled'
+            'Success', 'Failure'}
+
+        Raises
+        ------
+        HTTPError
+            An HTTP error occurred.
+
+        KrakenAPIError
+            A kraken.com API error occurred.
+
+        CallRateLimitError
+            The call rate limiter blocked the query.
+
+        """
+
+        # create data dictionary
+        data = {arg: value for arg, value in locals().items() if
+                arg != 'self' and value is not None}
+
+        # query
+        res = self.api.query_private('Staking/Pending', data=data)
+
+        # check for error
+        if len(res['error']) > 0:
+            raise KrakenAPIError(res['error'])
+
+        # create dataframe
+        try:
+            transactions = pd.json_normalize(
+                data=res['result']
+            ).set_index('refid')
+        except KeyError:
+            return None
+
+        return transactions
+
+    @crl_sleep
+    @callratelimiter('other')
+    def get_staking_transactions(self, otp=None):
+        """Returns the list of 1000 recent staking transactions from past
+        90 days.
+
+        Returns a ``pd.DataFrame`` of staking transactions.
+
+        Parameters
+        ----------
+        otp : str
+            Two-factor password (if two-factor enabled, otherwise not required)
+
+        Returns
+        -------
+        transactions : pd.DataFrame
+            Table containing transaction refids and details.
+            index = refid
+            type = Type of transaction {'bonding', 'reward', 'unbonding'}
+            asset = Asset code/name
+            amount = The transaction amount
+            time = Unix timestamp when the transaction was initiated.
+            bond_start = Unix timestamp from the start of bond period
+            (applicable only to `bonding` transactions).
+            bond_end = Unix timestamp of the end of bond period
+            (applicable only to `bonding` transactions).
+            status = Transaction status {'Initial', 'Pending', 'Settled'
+            'Success', 'Failure'}
+
+        Raises
+        ------
+        HTTPError
+            An HTTP error occurred.
+
+        KrakenAPIError
+            A kraken.com API error occurred.
+
+        CallRateLimitError
+            The call rate limiter blocked the query.
+
+        """
+
+        # create data dictionary
+        data = {arg: value for arg, value in locals().items() if
+                arg != 'self' and value is not None}
+
+        # query
+        res = self.api.query_private('Staking/Transactions', data=data)
+
+        # check for error
+        if len(res['error']) > 0:
+            raise KrakenAPIError(res['error'])
+
+        # create dataframe
+        try:
+            transactions = pd.json_normalize(
+                data=res['result']
+            ).set_index('refid')
+        except KeyError:
+            return None
+
+        return transactions
+
+    @crl_sleep
+    @callratelimiter('other')
+    def stake_asset(self, asset, amount, method, otp=None):
+        """Stake an asset from your spot wallet. This operation requires an
+        API key with `Withdraw funds` permission.
+
+        Returns a ``str`` of the transaction Reference ID.
+
+        Parameters
+        ----------
+        asset : str
+            Asset to stake (asset ID or `altname`)
+        amount : float
+            Amount of the asset to stake
+        method : str
+            Name of the staking option to use (refer to the Staking Assets
+            endpoint for the correct method names for each asset)
+        otp : str
+            Two-factor password (if two-factor enabled, otherwise not required)
+
+        Returns
+        -------
+        refid : str
+            Transaction Reference ID
+
+        Raises
+        ------
+        HTTPError
+            An HTTP error occurred.
+
+        KrakenAPIError
+            A kraken.com API error occurred.
+
+        CallRateLimitError
+            The call rate limiter blocked the query.
+
+        """
+
+        # create data dictionary
+        data = {arg: value for arg, value in locals().items() if
+                arg != 'self' and value is not None}
+
+        # query
+        res = self.api.query_private('Stake', data=data)
+
+        # check for error
+        if len(res['error']) > 0:
+            raise KrakenAPIError(res['error'])
+
+        return res['result']
+
+    @crl_sleep
+    @callratelimiter('other')
+    def unstake_asset(self, asset, amount, otp=None):
+        """Unstake an asset from your staking wallet. This operation requires
+        an API key with `Withdraw funds` permission.
+
+        Returns a ``str`` of the transaction Reference ID.
+
+        Parameters
+        ----------
+        asset : str
+            Asset to unstake (asset ID or `altname`). Must be a valid staking
+            asset (e.g. XBT.M, XTZ.S, ADA.S)
+        amount : float
+            Amount of the asset to stake
+        otp : str
+            Two-factor password (if two-factor enabled, otherwise not required)
+
+        Returns
+        -------
+        refid : str
+            Transaction Reference ID
+
+        Raises
+        ------
+        HTTPError
+            An HTTP error occurred.
+
+        KrakenAPIError
+            A kraken.com API error occurred.
+
+        CallRateLimitError
+            The call rate limiter blocked the query.
+
+        """
+
+        # create data dictionary
+        data = {arg: value for arg, value in locals().items() if
+                arg != 'self' and value is not None}
+
+        # query
+        res = self.api.query_private('Unstake', data=data)
+
+        # check for error
+        if len(res['error']) > 0:
+            raise KrakenAPIError(res['error'])
+
+        return res['result']
+
+    @crl_sleep
+    @callratelimiter('other')
+    def get_websockets_token(self, opt=None):
+        """An authentication token must be requested via this REST API endpoint
+        in order to connect to and authenticate with our Websockets API. The
+        token should be used within 15 minutes of creation, but it does not
+        expire once a successful Websockets connection and private subscription
+        has been made and is maintained.
+
+        The 'Access WebSockets API' permission must be enabled for the API key
+        in order to generate the authentication token.
+
+        Returns a ``dict`` of the websockets token and expriry time (secs).
+
+        Parameters
+        ----------
+        otp : str
+            Two-factor password (if two-factor enabled, otherwise not required)
+
+        Returns
+        -------
+        token: str
+            Websockets token
+        expires : int
+            Time (in seconds) after which the token expires
+
+        Raises
+        ------
+        HTTPError
+            An HTTP error occurred.
+
+        KrakenAPIError
+            A kraken.com API error occurred.
+
+        CallRateLimitError
+            The call rate limiter blocked the query.
+
+        """
+        # create data dictionary
+        data = {arg: value for arg, value in locals().items() if
+                arg != 'self' and value is not None}
+
+        # query
+        res = self.api.query_private('GetWebSocketsToken', data=data)
+
+        # check for error
+        if len(res['error']) > 0:
+            raise KrakenAPIError(res['error'])
+
+        return res['result']
